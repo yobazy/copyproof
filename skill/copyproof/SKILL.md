@@ -15,7 +15,7 @@ Everything lives in `<project>/.copyproof/`. A project reviewed before the renam
 | `feedback.json` | The user's ratings, tags, suggestions and comments, keyed by string id. The review page writes it. |
 | `voice.md` | Optional voice and tone notes. They go at the top of every prompt. |
 | `screenshots/<screen-slug>.png` | Optional, one per screen. |
-| `prompt.md` | The last generated revision prompt. |
+| `prompt.md` | The last revision prompt the user copied from the page, or that `export.mjs` wrote. |
 
 `SKILL_DIR` below means the directory this file is in. Scripts need only Node 18+ and have no dependencies.
 
@@ -90,7 +90,7 @@ A screenshot belongs to a screen by its file name: `.copyproof/screenshots/<slug
       async () => (0, eval)(await (await fetch('http://localhost:4477/api/locate?screen=' + encodeURIComponent('<screen name>'))).text())()
       ```
 
-      Use the port serve printed. If the page's content security policy blocks the fetch, print the same function with `node SKILL_DIR/scripts/locate.mjs <project> --screen "<screen name>"` and paste it into evaluate instead.
+      Use the port serve printed. The server only lets pages on this machine (`localhost`, `127.0.0.1`) read it. If the app is served from anywhere else, or its content security policy blocks the fetch, print the same function with `node SKILL_DIR/scripts/locate.mjs <project> --screen "<screen name>"` and paste it into evaluate instead.
    3. Without scrolling or changing anything, take a **full-page** screenshot to `.copyproof/screenshots/<slug>.png`.
 
    React Native Web and many single-page apps scroll inside a container, not the page, so a "full-page" screenshot only covers the first screen. Before locating, check for this with `Math.max(...[...document.querySelectorAll('*')].map(e => /(auto|scroll)/.test(getComputedStyle(e).overflowY) ? e.scrollHeight : 0))`. If the result is taller than the viewport, resize the viewport to that height first. Pages that reveal content on scroll need one pass of scrolling top to bottom before you locate.
@@ -146,13 +146,13 @@ node SKILL_DIR/scripts/serve.mjs <project>
 
 Run it in the background. It picks a free port starting at 4477, opens the browser, and prints the URL. Give the user the URL and a short summary: how many strings, how many screens, anything you weren't sure about. Then stop and let them review. Don't wait on the server.
 
-In the page, you go one screen at a time (pick one in the sidebar, or `[`/`]`), and each string sits next to its screen, highlighted. You rate 1–5 (`J`/`K` to move, `1`–`5` to rate) and click the text, or press `Enter`, to rewrite it in place. You can also tag problems, add comments (`C`), and mark a string to come back to when you're not ready to decide (`G`, shown under **For later**; it doesn't go into the prompt). Identical text in several places is one card, so you rate it once. `F` switches to focus mode, one string at a time. When a screen is done, **Apply this screen** (in its header) queues that screen's feedback for Claude Code as a batch and marks those strings **Queued**, so the user can keep reviewing while you apply it; editing a sent string's feedback makes it pending again. A stale or missing screenshot has an **Ask Claude to retake it** button that queues a retake the same way. **Generate prompt** builds the revision prompt, copies it, and saves it to `.copyproof/prompt.md`. Feedback saves to disk as you go, so you can close the page and come back later with "open the copy review". The page checks every few seconds for your changes (an applied batch, a retaken screenshot) and refreshes itself in place, keeping any rating the user hadn't saved yet.
+In the page, you go one screen at a time (pick one in the sidebar, or `[`/`]`), and each string sits next to its screen, highlighted. You rate 1–5 (`J`/`K` to move, `1`–`5` to rate) and click the text, or press `Enter`, to rewrite it in place. You can also tag problems, add comments (`C`), and mark a string to come back to when you're not ready to decide (`G`, shown under **For later**; it doesn't go into the prompt). Identical text in several places is one card, so you rate it once. `F` switches to focus mode, one string at a time. When a screen is done, **Queue this screen** (in its header) queues that screen's feedback for Claude Code as a batch and marks those strings **Queued**, so the user can keep reviewing while you apply it; editing a sent string's feedback makes it pending again. A stale or missing screenshot has an **Ask Claude to retake it** button that queues a retake the same way. **Generate prompt** shows the revision prompt; **Copy prompt** copies it and saves it to `.copyproof/prompt.md` (just opening the dialog saves nothing). Feedback saves to disk as you go, so you can close the page and come back later with "open the copy review". The page checks every few seconds for your changes (an applied batch, a retaken screenshot) and refreshes itself in place, keeping any rating the user hadn't saved yet.
 
 ## 6. Apply feedback
 
 When the user says "apply", "apply my copy feedback" (or similar):
 
-1. Check for batches first: `node SKILL_DIR/scripts/batches.mjs <project>` prints every screen the user sent with **Apply this screen** and you haven't applied yet, oldest first. A batch named `…-retake-<screen>.md` asks for a fresh screenshot of that screen instead: do step 4 for it. If there are any, apply exactly those (the user may still be reviewing other screens, so don't touch anything else), and when they're done run `node SKILL_DIR/scripts/batches.mjs <project> --done <file…>` with the batch file names. New batches can arrive while you work; run it again at the end and apply those too.
+1. Check for batches first: `node SKILL_DIR/scripts/batches.mjs <project>` prints every screen the user sent with **Queue this screen** and you haven't applied yet, oldest first. A batch named `…-retake-<screen>.md` asks for a fresh screenshot of that screen instead: do step 4 for it. If there are any, apply exactly those (the user may still be reviewing other screens, so don't touch anything else), and when they're done run `node SKILL_DIR/scripts/batches.mjs <project> --done <file…>` with the batch file names. New batches can arrive while you work; run it again at the end and apply those too.
 
    With no batches, use `.copyproof/prompt.md` if it's newer than `feedback.json`. Otherwise regenerate it with
    `node SKILL_DIR/scripts/export.mjs <project> --pending` (add `--max-rating N` if they want a different cutoff; `--screen "<name>"` for one screen).
